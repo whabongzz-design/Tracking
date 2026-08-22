@@ -114,8 +114,8 @@
    ตั้งค่าการเชื่อมต่อฐานข้อมูล (Supabase) — แก้ 2 บรรทัดนี้ก่อนใช้งาน
    วิธีตั้งค่า อ่านในไฟล์ README.md ที่แนบมาด้วย
 =================================================================== */
-const SUPABASE_URL = "https://qzahzusmtrqauanqlfqx.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_zT1tRiYiQdq-Q1mOLj5V5g_qZEKrODP";
+const SUPABASE_URL = "YOUR_SUPABASE_URL";          // เช่น https://xxxxxxxx.supabase.co
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY"; // anon public key จากหน้า Settings > API
 /* =================================================================== */
 
 const CONFIGURED = !SUPABASE_URL.includes('YOUR_') && !SUPABASE_ANON_KEY.includes('YOUR_');
@@ -190,6 +190,42 @@ function daysBetween(a,b){ return Math.round((a-b)/86400000); }
 function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
 function money(n){ return Number(n||0).toLocaleString('th-TH',{minimumFractionDigits:0}); }
 function esc(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* dd/mm/yyyy <-> yyyy-mm-dd (ISO) conversion helpers, and auto-format-as-you-type mask */
+function ddmmyyyyToISO(s){
+  if(!s) return '';
+  const m = String(s).trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(!m) return null;
+  const [_, dd, mm, yyyy] = m;
+  const d = Number(dd), mo = Number(mm), y = Number(yyyy);
+  if(mo<1||mo>12||d<1||d>31) return null;
+  const test = new Date(y, mo-1, d);
+  if(test.getFullYear()!==y || test.getMonth()!==mo-1 || test.getDate()!==d) return null;
+  return `${yyyy}-${mm}-${dd}`;
+}
+function isoToDDMMYYYY(s){
+  if(!s) return '';
+  const m = String(s).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return '';
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+function todayDDMMYYYY(){
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+/* Auto-insert "/" as the user types digits into any .date-input field (event delegation, works for dynamically rendered forms) */
+document.addEventListener('input', e=>{
+  if(e.target && e.target.classList && e.target.classList.contains('date-input')){
+    let digits = e.target.value.replace(/\D/g,'').slice(0,8);
+    let out = digits;
+    if(digits.length>4) out = digits.slice(0,2)+'/'+digits.slice(2,4)+'/'+digits.slice(4);
+    else if(digits.length>2) out = digits.slice(0,2)+'/'+digits.slice(2);
+    e.target.value = out;
+  }
+});
+
 
 function priceOf(type){
   const t = DB.reference.types.find(t=>t.name===type);
@@ -340,8 +376,8 @@ function renderRegistry(app){
           <div class="field"><label>Sequence No. (เลขข้างขวด) *</label><input name="seq" required placeholder="สแกน/พิมพ์เลขข้างขวด"></div>
           <div class="field"><label>LOT No. *</label><input name="lot" required></div>
           <div class="field"><label>ชนิดขวด *</label><select name="type" required>${typeOpts}</select></div>
-          <div class="field"><label>วันที่รับเข้าคลัง *</label><input type="date" name="received" required></div>
-          <div class="field"><label>วันหมดอายุ *</label><input type="date" name="expiry" required></div>
+          <div class="field"><label>วันที่รับเข้าคลัง * (dd/mm/yyyy)</label><input type="text" name="received" class="date-input" placeholder="dd/mm/yyyy" maxlength="10" required></div>
+          <div class="field"><label>วันหมดอายุ * (dd/mm/yyyy)</label><input type="text" name="expiry" class="date-input" placeholder="dd/mm/yyyy" maxlength="10" required></div>
           <div class="field"><label>หมายเหตุ</label><input name="notes" placeholder="(ถ้ามี)"></div>
         </div>
         <button class="btn" type="submit">+ ลงทะเบียนขวด</button>
@@ -361,9 +397,13 @@ function renderRegistry(app){
       const f = new FormData(e.target);
       const seq = f.get('seq').trim();
       if(DB.bottles.some(b=>b.seq===seq)){ flash(app, `Sequence No. "${seq}" มีอยู่แล้วในระบบ`, false); return; }
+      const received = ddmmyyyyToISO(f.get('received'));
+      const expiry = ddmmyyyyToISO(f.get('expiry'));
+      if(!received){ flash(app, `วันที่รับเข้าคลังไม่ถูกต้อง กรุณากรอกรูปแบบ dd/mm/yyyy`, false); return; }
+      if(!expiry){ flash(app, `วันหมดอายุไม่ถูกต้อง กรุณากรอกรูปแบบ dd/mm/yyyy`, false); return; }
       DB.bottles.push({
         seq, lot:f.get('lot').trim(), type:f.get('type'),
-        received:f.get('received'), expiry:f.get('expiry'),
+        received, expiry,
         notes:f.get('notes')||'', problem:null
       });
       await save('bottles');
@@ -389,7 +429,7 @@ function drawRegTable(filter){
   table.innerHTML = `
     <thead><tr>
       <th>Seq No.</th><th>LOT</th><th>ชนิดขวด</th><th>รับเข้า</th><th>หมดอายุ</th><th>เหลือ(วัน)</th>
-      <th>สถานะ</th><th>Ward ปัจจุบัน</th><th>FEFO</th><th>ผลลัพธ์ทางการเงิน</th>${canWrite()?'<th>รายงานปัญหา</th>':''}
+      <th>สถานะ</th><th>Ward ปัจจุบัน</th><th>FEFO</th><th>ผลลัพธ์ทางการเงิน</th>${canWrite()?'<th>รายงานปัญหา</th>':''}${canManageReference()?'<th>ลบ</th>':''}
     </tr></thead>
     <tbody>${rows.map(b=>`
       <tr class="${fefo[b.seq]&&fefo[b.seq]<=3?'hi-fefo':''}">
@@ -404,11 +444,22 @@ function drawRegTable(filter){
                 <button class="btn small danger" data-act="dmg" data-seq="${esc(b.seq)}">ชำรุด</button>
                 <button class="btn small danger" data-act="cont" data-seq="${esc(b.seq)}">ปนเปื้อน</button>
               </div>`}</td>` : ''}
+        ${canManageReference() ? `<td><button class="btn small secondary" data-act="del" data-seq="${esc(b.seq)}">🗑️ ลบ</button></td>` : ''}
       </tr>`).join('')}
     </tbody>`;
   table.querySelectorAll('button[data-act]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const seq = btn.dataset.seq;
+      if(btn.dataset.act==='del'){
+        if(!confirm(`ยืนยันลบขวด ${seq} ออกจากทะเบียนถาวร? รวมถึงประวัติเบิก/คืน/ติดตามของขวดนี้ทั้งหมด — ย้อนกลับไม่ได้`)) return;
+        DB.bottles = DB.bottles.filter(x=>x.seq!==seq);
+        DB.issues = DB.issues.filter(x=>x.seq!==seq);
+        DB.returns = DB.returns.filter(x=>x.seq!==seq);
+        DB.recalls = DB.recalls.filter(x=>x.seq!==seq);
+        await save('bottles'); await save('issues'); await save('returns'); await save('recalls');
+        renderApp();
+        return;
+      }
       const b = DB.bottles.find(x=>x.seq===seq);
       if(!b) return;
       if(!confirm(`ยืนยันรายงานปัญหาขวด ${seq} เป็น "${btn.dataset.act==='dmg'?'ชำรุด/แตก':'ปนเปื้อน'}"? การนี้จะตัดขวดเป็นสูญเสียทันที`)) return;
@@ -428,7 +479,7 @@ function renderIssue(app){
       <h2>บันทึกการเบิกจ่ายขวด</h2>
       <form id="issueForm">
         <div class="grid">
-          <div class="field"><label>วันที่เบิก *</label><input type="date" name="date" required value="${new Date().toISOString().slice(0,10)}"></div>
+          <div class="field"><label>วันที่เบิก * (dd/mm/yyyy)</label><input type="text" name="date" class="date-input" placeholder="dd/mm/yyyy" maxlength="10" required value="${todayDDMMYYYY()}"></div>
           <div class="field"><label>เวลา</label><input type="time" name="time" value="${new Date().toTimeString().slice(0,5)}"></div>
           <div class="field"><label>Ward *</label><select name="ward" required>${wardOpts}</select></div>
           <div class="field"><label>Sequence No. *</label><input name="seq" required placeholder="สแกน/พิมพ์เลขข้างขวด"></div>
@@ -465,7 +516,9 @@ function renderIssue(app){
       if(!b){ flash(app, `ไม่พบ Sequence No. "${seq}" ในทะเบียนขวด — กรุณาลงทะเบียนก่อน`, false); return; }
       const c = computeBottle(b);
       if(c.st.state!=='in_stock'){ flash(app, `ขวด ${seq} ไม่ได้อยู่ในคลัง (สถานะ: ${c.status}) ไม่สามารถเบิกได้`, false); return; }
-      DB.issues.push({ id:uid(), date:f.get('date'), time:f.get('time')||'00:00', ward:f.get('ward'), seq, by:f.get('by').trim() });
+      const date = ddmmyyyyToISO(f.get('date'));
+      if(!date){ flash(app, `วันที่เบิกไม่ถูกต้อง กรุณากรอกรูปแบบ dd/mm/yyyy`, false); return; }
+      DB.issues.push({ id:uid(), date, time:f.get('time')||'00:00', ward:f.get('ward'), seq, by:f.get('by').trim() });
       await save('issues');
       e.target.reset();
       flash(app, `บันทึกการเบิกขวด ${seq} ให้ ${f.get('ward')} เรียบร้อย`);
@@ -495,7 +548,7 @@ function renderReturn(app){
       <h2>บันทึกการรับคืนขวด</h2>
       <form id="returnForm">
         <div class="grid">
-          <div class="field"><label>วันที่รับคืน *</label><input type="date" name="date" required value="${new Date().toISOString().slice(0,10)}"></div>
+          <div class="field"><label>วันที่รับคืน * (dd/mm/yyyy)</label><input type="text" name="date" class="date-input" placeholder="dd/mm/yyyy" maxlength="10" required value="${todayDDMMYYYY()}"></div>
           <div class="field"><label>เวลา</label><input type="time" name="time" value="${new Date().toTimeString().slice(0,5)}"></div>
           <div class="field"><label>Ward *</label><select name="ward" required>${wardOpts}</select></div>
           <div class="field"><label>Sequence No. (สแกนบาร์โค้ดได้) *</label><input name="seq" required></div>
@@ -540,7 +593,9 @@ function renderReturn(app){
       if(!b){ flash(app, `ไม่พบ Sequence No. "${seq}" ในทะเบียนขวด`, false); return; }
       const c = computeBottle(b);
       if(c.st.state!=='issued'){ flash(app, `ขวด ${seq} ไม่ได้อยู่ในสถานะเบิกออก (สถานะ: ${c.status}) ไม่สามารถรับคืนได้`, false); return; }
-      DB.returns.push({ id:uid(), date:f.get('date'), time:f.get('time')||'00:00', ward:f.get('ward'), seq, by:f.get('by').trim(), returnType:f.get('returnType') });
+      const date = ddmmyyyyToISO(f.get('date'));
+      if(!date){ flash(app, `วันที่รับคืนไม่ถูกต้อง กรุณากรอกรูปแบบ dd/mm/yyyy`, false); return; }
+      DB.returns.push({ id:uid(), date, time:f.get('time')||'00:00', ward:f.get('ward'), seq, by:f.get('by').trim(), returnType:f.get('returnType') });
       await save('returns');
       e.target.reset();
       flash(app, `บันทึกการรับคืนขวด ${seq} เรียบร้อย`);
@@ -567,7 +622,7 @@ function renderRecall(app){
       <h2>บันทึกการติดตามเรียกคืน</h2>
       <form id="recallForm">
         <div class="grid">
-          <div class="field"><label>วันที่ติดตาม *</label><input type="date" name="date" required value="${new Date().toISOString().slice(0,10)}"></div>
+          <div class="field"><label>วันที่ติดตาม * (dd/mm/yyyy)</label><input type="text" name="date" class="date-input" placeholder="dd/mm/yyyy" maxlength="10" required value="${todayDDMMYYYY()}"></div>
           <div class="field"><label>Sequence No. *</label><input name="seq" required></div>
           <div class="field"><label>ผู้ประสานงาน *</label><input name="coordinator" required></div>
           <div class="field"><label>วิธีติดต่อ</label><select name="method">
@@ -576,7 +631,7 @@ function renderRecall(app){
           <div class="field"><label>ผลการติดต่อ</label><select name="result">
             <option>ติดต่อได้ / นัดคืนแล้ว</option><option>ติดต่อได้ / ยังไม่พร้อมคืน</option><option>ติดต่อไม่ได้</option>
           </select></div>
-          <div class="field"><label>วันที่นัดคืน</label><input type="date" name="appointment"></div>
+          <div class="field"><label>วันที่นัดคืน (dd/mm/yyyy)</label><input type="text" name="appointment" class="date-input" placeholder="dd/mm/yyyy" maxlength="10"></div>
         </div>
         <div class="field"><label>เหตุผลที่ยังไม่คืน</label><input name="reason" placeholder="(ถ้ามี)"></div>
         <div id="recallPreview"></div>
@@ -608,8 +663,16 @@ function renderRecall(app){
       const seq = f.get('seq').trim();
       const b = DB.bottles.find(x=>x.seq===seq);
       if(!b){ flash(app, `ไม่พบ Sequence No. "${seq}" ในทะเบียนขวด`, false); return; }
-      DB.recalls.push({ id:uid(), date:f.get('date'), seq, coordinator:f.get('coordinator').trim(),
-        method:f.get('method'), result:f.get('result'), appointment:f.get('appointment')||'', reason:f.get('reason')||'' });
+      const date = ddmmyyyyToISO(f.get('date'));
+      if(!date){ flash(app, `วันที่ติดตามไม่ถูกต้อง กรุณากรอกรูปแบบ dd/mm/yyyy`, false); return; }
+      const appointmentRaw = f.get('appointment')||'';
+      let appointment = '';
+      if(appointmentRaw.trim()){
+        appointment = ddmmyyyyToISO(appointmentRaw);
+        if(!appointment){ flash(app, `วันที่นัดคืนไม่ถูกต้อง กรุณากรอกรูปแบบ dd/mm/yyyy หรือเว้นว่างไว้`, false); return; }
+      }
+      DB.recalls.push({ id:uid(), date, seq, coordinator:f.get('coordinator').trim(),
+        method:f.get('method'), result:f.get('result'), appointment, reason:f.get('reason')||'' });
       await save('recalls');
       e.target.reset();
       flash(app, `บันทึกการติดตามขวด ${seq} เรียบร้อย`);
