@@ -1,1 +1,899 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบติดตามขวด Hemoculture</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy:#0f3d5c; --navy-dk:#0a2c42; --teal:#1a7a6e; --teal-lt:#e6f4f2;
+    --amber:#c98a1c; --amber-lt:#fdf1dd; --red:#b8433a; --red-lt:#fbe9e7;
+    --blue:#2f6fb0; --blue-lt:#eaf2fb; --gray:#6b7280; --gray-lt:#f1f2f4;
+    --purple:#7a5ca8; --purple-lt:#f1ecf8;
+    --ink:#1e2937; --paper:#fbfaf8; --card:#ffffff; --line:#e4e0d8;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Segoe UI',-apple-system,Sarabun,Tahoma,sans-serif;background:var(--paper);color:var(--ink);}
+  header{background:linear-gradient(135deg,var(--navy),var(--navy-dk));color:#fff;padding:14px 20px;position:sticky;top:0;z-index:20;box-shadow:0 2px 10px rgba(0,0,0,.15);}
+  .hrow{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+  header h1{margin:0;font-size:1.1rem;font-weight:700;letter-spacing:.2px;}
+  header p{margin:2px 0 0;font-size:.76rem;opacity:.85;}
+  .userbox{display:flex;align-items:center;gap:8px;font-size:.78rem;}
+  .rolebadge{padding:3px 9px;border-radius:20px;font-weight:700;font-size:.68rem;text-transform:uppercase;}
+  .role-admin{background:#fbe9e7;color:#9c352d;}
+  .role-staff{background:#fdf1dd;color:#916212;}
+  .role-viewer{background:#eaf2fb;color:#204b7a;}
+  .btn-out{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:#fff;padding:5px 10px;border-radius:6px;font-size:.75rem;cursor:pointer;}
+  .btn-out:hover{background:rgba(255,255,255,.22);}
+  nav{display:flex;overflow-x:auto;background:var(--navy-dk);position:sticky;top:58px;z-index:19;-webkit-overflow-scrolling:touch;}
+  nav button{flex:0 0 auto;background:none;border:none;color:#cfe0ea;padding:11px 14px;font-size:.82rem;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;font-weight:600;}
+  nav button.active{color:#fff;border-bottom-color:var(--amber);background:rgba(255,255,255,.06);}
+  main{padding:14px;max-width:1200px;margin:0 auto;padding-bottom:60px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .card h2{margin:0 0 10px;font-size:1rem;color:var(--navy);border-bottom:2px solid var(--teal-lt);padding-bottom:8px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+  label{display:block;font-size:.75rem;color:var(--gray);margin-bottom:3px;font-weight:600;}
+  input,select,textarea{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:6px;font-size:.88rem;background:#fff;color:var(--ink);font-family:inherit;}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal);}
+  .field{margin-bottom:8px;}
+  .btn{background:var(--teal);color:#fff;border:none;padding:9px 16px;border-radius:6px;font-size:.85rem;font-weight:700;cursor:pointer;}
+  .btn:hover{background:#146058;}
+  .btn.secondary{background:var(--gray-lt);color:var(--ink);border:1px solid var(--line);}
+  .btn.secondary:hover{background:#e7e5e0;}
+  .btn.danger{background:var(--red);}
+  .btn.danger:hover{background:#9c352d;}
+  .btn.small{padding:5px 9px;font-size:.72rem;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .row-actions{display:flex;gap:6px;flex-wrap:wrap;}
+  table{width:100%;border-collapse:collapse;font-size:.8rem;}
+  th,td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;}
+  th{background:var(--teal-lt);color:var(--navy);position:sticky;top:0;font-size:.72rem;text-transform:uppercase;letter-spacing:.3px;}
+  .twrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;max-height:520px;overflow-y:auto;}
+  tr:hover td{background:#faf9f6;}
+  .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:.72rem;font-weight:700;white-space:nowrap;}
+  .b-green{background:#e3f4e6;color:#1f7a34;}
+  .b-yellow{background:var(--amber-lt);color:#916212;}
+  .b-red{background:var(--red-lt);color:#9c352d;}
+  .b-blue{background:var(--blue-lt);color:#204b7a;}
+  .b-orange{background:#fde8d8;color:#b0530f;}
+  .b-purple{background:var(--purple-lt);color:#5b3f85;}
+  .b-gray{background:var(--gray-lt);color:#4b5563;}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;}
+  .stat .num{font-size:1.5rem;font-weight:800;color:var(--navy);}
+  .stat .lbl{font-size:.72rem;color:var(--gray);margin-top:2px;}
+  .stat.money .num{color:var(--teal);}
+  .stat.loss .num{color:var(--red);}
+  .msg{padding:9px 12px;border-radius:6px;font-size:.82rem;margin-bottom:10px;}
+  .msg.ok{background:#e3f4e6;color:#1f7a34;}
+  .msg.err{background:var(--red-lt);color:#9c352d;}
+  .preview{background:var(--gray-lt);border-radius:6px;padding:8px 10px;font-size:.78rem;margin:6px 0;color:var(--ink);}
+  .preview b{color:var(--navy);}
+  .empty{color:var(--gray);font-size:.85rem;padding:16px;text-align:center;}
+  .hi-fefo{background:#fde8d8 !important;}
+  .searchbar{margin-bottom:10px;}
+  .refline{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);font-size:.85rem;}
+  .refline input{flex:1;}
+  .readonly-note{background:var(--blue-lt);color:#204b7a;padding:10px 12px;border-radius:6px;font-size:.8rem;margin-bottom:12px;}
+  footer{text-align:center;color:var(--gray);font-size:.72rem;padding:10px;}
+  .setup,.authbox{max-width:440px;margin:60px auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:26px;}
+  .setup{max-width:640px;}
+  .setup h2,.authbox h2{color:var(--navy);margin-top:0;}
+  .setup code{background:var(--gray-lt);padding:2px 6px;border-radius:4px;font-size:.85rem;}
+  .setup pre{background:#0a2c42;color:#d5e8e0;padding:14px;border-radius:8px;overflow-x:auto;font-size:.78rem;line-height:1.5;}
+  .setup ol{padding-left:20px;line-height:1.9;}
+  .conn-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+  .conn-ok{background:#2fa84f;} .conn-bad{background:#c0392b;}
+  .authtabs{display:flex;gap:6px;margin-bottom:16px;}
+  .authtabs button{flex:1;padding:8px;border:1px solid var(--line);background:var(--gray-lt);border-radius:6px;font-size:.82rem;font-weight:700;cursor:pointer;color:var(--gray);}
+  .authtabs button.active{background:var(--teal);color:#fff;border-color:var(--teal);}
+  @media (max-width:600px){ th,td{font-size:.72rem;padding:6px;} header h1{font-size:1rem;} }
+</style>
+</head>
+<body>
 
+<header>
+  <div class="hrow">
+    <div>
+      <h1>🧫 ระบบติดตามขวด Hemoculture</h1>
+      <p id="connStatus">BD BACTEC — ลงทะเบียนครั้งเดียว ติดตามเบิก–คืนอัตโนมัติ</p>
+    </div>
+    <div class="userbox" id="userbox"></div>
+  </div>
+</header>
+
+<nav id="tabbar"></nav>
+
+<main id="app"></main>
+
+<footer>ข้อมูลบันทึกลง Supabase — เข้าสู่ระบบเพื่อใช้งานร่วมกันได้ทุกเครื่อง</footer>
+
+<script>
+/* ===================================================================
+   ตั้งค่าการเชื่อมต่อฐานข้อมูล (Supabase) — แก้ 2 บรรทัดนี้ก่อนใช้งาน
+   วิธีตั้งค่า อ่านในไฟล์ README.md ที่แนบมาด้วย
+=================================================================== */
+const SUPABASE_URL = "YOUR_SUPABASE_URL";          // เช่น https://xxxxxxxx.supabase.co
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY"; // anon public key จากหน้า Settings > API
+/* =================================================================== */
+
+const CONFIGURED = !SUPABASE_URL.includes('YOUR_') && !SUPABASE_ANON_KEY.includes('YOUR_');
+const sb = CONFIGURED ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+/* ============================ AUTH / ROLE STATE ============================ */
+let SESSION = null;   // supabase auth session
+let MY_ROLE = null;   // 'admin' | 'staff' | 'viewer'
+let MY_EMAIL = null;
+
+function canWrite(){ return MY_ROLE==='admin' || MY_ROLE==='staff'; }
+function canManageReference(){ return MY_ROLE==='admin'; }
+function canManageUsers(){ return MY_ROLE==='admin'; }
+
+/* ============================ DATA STORAGE (kv_store via Supabase, RLS-protected) ============================ */
+const K = { bottles:'bottles_v1', issues:'issues_v1', returns:'returns_v1', recalls:'recalls_v1', reference:'reference_v1' };
+let DB = { bottles:[], issues:[], returns:[], recalls:[], reference:null };
+let LOADED = false;
+
+const DEFAULT_REFERENCE = {
+  wards: [
+    'ICU ศัลยกรรมหัวใจชั้น3','ICU ศัลยกรรม','ICU อายุรกรรม','หอผู้ป่วยสูติกรรม ชั้น 5',
+    'เด็กปกติ','เด็กอ่อน','อายุรกรรม ชั้น 3','รังสี ก'
+  ],
+  types: [
+    { name:'BD BACTEC Peds Plus/F', price:80 },
+    { name:'BD BACTEC Myco/F Lytic (Fungus/TB)', price:147 },
+    { name:'BD BACTEC Plus Aerobic/F', price:75 },
+    { name:'BD BACTEC Lytic/10 Anaerobic/F', price:75 }
+  ]
+};
+
+async function sbGet(key){
+  const { data, error } = await sb.from('kv_store').select('value').eq('key', key).maybeSingle();
+  if(error) throw error;
+  return data ? data.value : null;
+}
+async function sbSet(key, value){
+  const { error } = await sb.from('kv_store').upsert({ key, value, updated_at: new Date().toISOString() });
+  if(error) throw error;
+}
+
+async function loadAll(){
+  const entries = Object.entries(K);
+  for(const [name,key] of entries){
+    try{
+      const val = await sbGet(key);
+      DB[name] = val !== null ? val : (name==='reference' ? DEFAULT_REFERENCE : []);
+    }catch(e){
+      console.error('load failed', name, e);
+      DB[name] = (name==='reference' ? DEFAULT_REFERENCE : []);
+    }
+  }
+  if(!DB.reference) DB.reference = DEFAULT_REFERENCE;
+  LOADED = true;
+}
+async function save(name){
+  try{
+    await sbSet(K[name], DB[name]);
+  }catch(e){
+    console.error('save failed', name, e);
+    alert('บันทึกข้อมูลไม่สำเร็จ — คุณอาจไม่มีสิทธิ์แก้ไขข้อมูลนี้ หรือการเชื่อมต่อมีปัญหา (ดู Console)');
+  }
+}
+
+/* ============================ HELPERS ============================ */
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function today(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
+function parseD(s){ if(!s) return null; const d=new Date(s+'T00:00:00'); return isNaN(d) ? null : d; }
+function fmtD(s){ const d=parseD(s); if(!d) return '-'; return d.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+function daysBetween(a,b){ return Math.round((a-b)/86400000); }
+function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function money(n){ return Number(n||0).toLocaleString('th-TH',{minimumFractionDigits:0}); }
+function esc(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function priceOf(type){
+  const t = DB.reference.types.find(t=>t.name===type);
+  return t ? Number(t.price) : 0;
+}
+
+function bottleState(seq){
+  const events = [];
+  DB.issues.filter(i=>i.seq===seq).forEach(i=>events.push({date:i.date, kind:'issue', ward:i.ward, ts:new Date(i.date+'T'+(i.time||'00:00'))}));
+  DB.returns.filter(r=>r.seq===seq).forEach(r=>events.push({date:r.date, kind:'return', returnType:r.returnType, ward:r.ward, ts:new Date(r.date+'T'+(r.time||'00:00'))}));
+  events.sort((a,b)=>a.ts-b.ts);
+
+  let state='in_stock', ward=null, lastIssueDate=null, lastReturnDate=null;
+  events.forEach(ev=>{
+    if(ev.kind==='issue'){ state='issued'; ward=ev.ward; lastIssueDate=ev.date; }
+    else if(ev.kind==='return'){
+      lastReturnDate = ev.date;
+      if(ev.returnType==='stock'){ state='in_stock'; ward=null; }
+      else if(ev.returnType==='culture'){ state='used_culture'; ward=ev.ward; }
+      else { state='used_other'; ward=ev.ward; }
+    }
+  });
+  return { state, ward, lastIssueDate, lastReturnDate, events };
+}
+
+function recallDays(ward, type){
+  if(!ward) return 45;
+  const cutoff = addDays(today(), -90);
+  const count = DB.returns.filter(r=>{
+    if(r.returnType!=='culture' || r.ward!==ward) return false;
+    const b = DB.bottles.find(x=>x.seq===r.seq);
+    if(!b || b.type!==type) return false;
+    return parseD(r.date) >= cutoff;
+  }).length;
+  if(count>=3) return 45;
+  if(count<=0) return 90;
+  const days = 90 - (count/3)*45;
+  return Math.round(Math.min(90,Math.max(45,days)));
+}
+
+function computeBottle(b){
+  const st = bottleState(b.seq);
+  const expiry = parseD(b.expiry);
+  const daysLeft = expiry ? daysBetween(expiry, today()) : null;
+  let status='', badge='gray', financial='-', financialClass='';
+  let recallDue = null;
+
+  if(b.problem){
+    status = b.problem==='damaged' ? '❌ ชำรุด/แตก (สูญเสีย)' : '❌ ปนเปื้อน (สูญเสีย)';
+    badge='red'; financial = `-${money(priceOf(b.type))} (สูญเสีย)`; financialClass='loss';
+  } else if(st.state==='in_stock'){
+    if(daysLeft<0){ status='🔴 หมดอายุแล้ว (อยู่ในคลัง)'; badge='red';
+      financial = `-${money(priceOf(b.type))} (สูญเสีย)`; financialClass='loss';
+    } else if(daysLeft<=45){ status='🟡 ใกล้หมดอายุ (อยู่ในคลัง)'; badge='yellow'; }
+    else { status='🟢 ปกติ (อยู่ในคลัง)'; badge='green'; }
+    if(st.lastReturnDate){
+      financial = `+${money(priceOf(b.type))} (Cost Avoidance)`; financialClass='save';
+    }
+  } else if(st.state==='issued'){
+    recallDue = expiry ? addDays(expiry, -recallDays(st.ward, b.type)) : null;
+    if(daysLeft!==null && daysLeft<0){ status='⛔ หมดอายุ-ยังไม่คืน'; badge='red';
+      financial = `-${money(priceOf(b.type))} (เสี่ยงสูญเสีย)`; financialClass='loss';
+    } else if(recallDue && today()>=recallDue){ status='⚠️ ใกล้หมดอายุ-เรียกคืน'; badge='orange'; }
+    else { status='🔵 ปกติ (ยังไม่ครบกำหนด)'; badge='blue'; }
+  } else if(st.state==='used_culture'){
+    status='🧪 ส่งเพาะเชื้อแล้ว'; badge='purple'; financial='ใช้งานปกติ (ไม่นับสูญเสีย)';
+  } else if(st.state==='used_other'){
+    status='❌ สูญเสีย (อื่นๆ)'; badge='red';
+    financial = `-${money(priceOf(b.type))} (สูญเสีย)`; financialClass='loss';
+  }
+
+  const recallCount = DB.recalls.filter(r=>r.seq===b.seq).length;
+  return { ...b, st, daysLeft, status, badge, financial, financialClass, recallDue,
+    currentWard: st.ward, lastIssueDate: st.lastIssueDate, price: priceOf(b.type), recallCount };
+}
+
+function allComputed(){ return DB.bottles.map(computeBottle); }
+
+function fefoRank(){
+  const inStock = allComputed().filter(b=>b.st.state==='in_stock' && !b.problem)
+    .sort((a,b)=> parseD(a.expiry)-parseD(b.expiry));
+  const map = {};
+  inStock.forEach((b,idx)=>{ map[b.seq]=idx+1; });
+  return map;
+}
+
+/* ============================ APP STATE / ROUTER ============================ */
+let TAB = 'registry';
+function tabs(){
+  const t = [
+    {id:'registry', label:'1) ทะเบียนขวด'},
+    {id:'issue', label:'2) เบิกจ่าย'},
+    {id:'return', label:'3) รับคืน'},
+    {id:'recall', label:'4) ติดตามเรียกคืน'},
+    {id:'dashboard', label:'5) Dashboard'},
+  ];
+  if(canManageReference()) t.push({id:'reference', label:'6) รายการอ้างอิง'});
+  if(canManageUsers()) t.push({id:'users', label:'7) จัดการผู้ใช้'});
+  return t;
+}
+
+function renderTabbar(){
+  const nav = document.getElementById('tabbar');
+  const T = tabs();
+  if(!T.find(t=>t.id===TAB)) TAB = T[0].id;
+  nav.innerHTML = T.map(t=>`<button data-tab="${t.id}" class="${t.id===TAB?'active':''}">${t.label}</button>`).join('');
+  nav.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ TAB=btn.dataset.tab; renderTabbar(); renderApp(); });
+  });
+}
+
+function renderApp(){
+  const app = document.getElementById('app');
+  if(!LOADED){ app.innerHTML = '<div class="empty">กำลังโหลดข้อมูล…</div>'; return; }
+  if(TAB==='registry') return renderRegistry(app);
+  if(TAB==='issue') return renderIssue(app);
+  if(TAB==='return') return renderReturn(app);
+  if(TAB==='recall') return renderRecall(app);
+  if(TAB==='dashboard') return renderDashboard(app);
+  if(TAB==='reference' && canManageReference()) return renderReference(app);
+  if(TAB==='users' && canManageUsers()) return renderUsers(app);
+  TAB='dashboard'; renderTabbar(); return renderDashboard(app);
+}
+
+function flash(app, text, ok=true){
+  const el = document.createElement('div');
+  el.className = 'msg ' + (ok?'ok':'err');
+  el.textContent = text;
+  app.prepend(el);
+  setTimeout(()=>el.remove(), 3500);
+}
+function readonlyNote(app){
+  const el = document.createElement('div');
+  el.className = 'readonly-note';
+  el.textContent = '👁️ คุณมีสิทธิ์ดูอย่างเดียว (viewer) — ให้ admin เลื่อนสิทธิ์เป็น staff หากต้องการกรอกข้อมูล';
+  app.prepend(el);
+}
+
+/* ============================ TAB 1: REGISTRY ============================ */
+function renderRegistry(app){
+  const typeOpts = DB.reference.types.map(t=>`<option value="${esc(t.name)}">${esc(t.name)} (${money(t.price)}฿)</option>`).join('');
+  app.innerHTML = `
+    ${canWrite() ? `
+    <div class="card">
+      <h2>ลงทะเบียนขวดใหม่ (ทำครั้งเดียวต่อขวด)</h2>
+      <form id="regForm">
+        <div class="grid">
+          <div class="field"><label>Sequence No. (เลขข้างขวด) *</label><input name="seq" required placeholder="สแกน/พิมพ์เลขข้างขวด"></div>
+          <div class="field"><label>LOT No. *</label><input name="lot" required></div>
+          <div class="field"><label>ชนิดขวด *</label><select name="type" required>${typeOpts}</select></div>
+          <div class="field"><label>วันที่รับเข้าคลัง *</label><input type="date" name="received" required></div>
+          <div class="field"><label>วันหมดอายุ *</label><input type="date" name="expiry" required></div>
+          <div class="field"><label>หมายเหตุ</label><input name="notes" placeholder="(ถ้ามี)"></div>
+        </div>
+        <button class="btn" type="submit">+ ลงทะเบียนขวด</button>
+      </form>
+    </div>` : ''}
+
+    <div class="card">
+      <h2>ทะเบียนขวดทั้งหมด (${DB.bottles.length} ใบ)</h2>
+      <div class="searchbar"><input id="regSearch" placeholder="ค้นหา: Sequence No. / LOT / ชนิดขวด / Ward..."></div>
+      <div class="twrap"><table id="regTable"></table></div>
+    </div>
+  `;
+  if(!canWrite()) readonlyNote(app);
+  if(canWrite()){
+    document.getElementById('regForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const seq = f.get('seq').trim();
+      if(DB.bottles.some(b=>b.seq===seq)){ flash(app, `Sequence No. "${seq}" มีอยู่แล้วในระบบ`, false); return; }
+      DB.bottles.push({
+        seq, lot:f.get('lot').trim(), type:f.get('type'),
+        received:f.get('received'), expiry:f.get('expiry'),
+        notes:f.get('notes')||'', problem:null
+      });
+      await save('bottles');
+      e.target.reset();
+      flash(app, `ลงทะเบียนขวด ${seq} เรียบร้อย`);
+      renderApp();
+    });
+  }
+  document.getElementById('regSearch').addEventListener('input', e=>drawRegTable(e.target.value));
+  drawRegTable('');
+}
+
+function drawRegTable(filter){
+  const fefo = fefoRank();
+  let rows = allComputed();
+  if(filter){
+    const f = filter.toLowerCase();
+    rows = rows.filter(b=> [b.seq,b.lot,b.type,b.currentWard,b.notes].some(v=>String(v||'').toLowerCase().includes(f)));
+  }
+  rows.sort((a,b)=> (parseD(a.expiry)||0) - (parseD(b.expiry)||0));
+  const table = document.getElementById('regTable');
+  if(!rows.length){ table.innerHTML = `<tr><td class="empty">ไม่พบข้อมูล</td></tr>`; return; }
+  table.innerHTML = `
+    <thead><tr>
+      <th>Seq No.</th><th>LOT</th><th>ชนิดขวด</th><th>รับเข้า</th><th>หมดอายุ</th><th>เหลือ(วัน)</th>
+      <th>สถานะ</th><th>Ward ปัจจุบัน</th><th>FEFO</th><th>ผลลัพธ์ทางการเงิน</th>${canWrite()?'<th>รายงานปัญหา</th>':''}
+    </tr></thead>
+    <tbody>${rows.map(b=>`
+      <tr class="${fefo[b.seq]&&fefo[b.seq]<=3?'hi-fefo':''}">
+        <td>${esc(b.seq)}</td><td>${esc(b.lot)}</td><td>${esc(b.type)}</td>
+        <td>${fmtD(b.received)}</td><td>${fmtD(b.expiry)}</td><td>${b.daysLeft!==null?b.daysLeft:'-'}</td>
+        <td><span class="badge b-${b.badge}">${b.status}</span></td>
+        <td>${esc(b.currentWard||(b.st.state==='in_stock'?'อยู่ในคลัง':'-'))}</td>
+        <td>${fefo[b.seq]||'-'}</td>
+        <td>${esc(b.financial)}</td>
+        ${canWrite() ? `<td>${b.problem ? `<span class="badge b-red">${b.problem==='damaged'?'ชำรุด/แตก':'ปนเปื้อน'}</span>` :
+              `<div class="row-actions">
+                <button class="btn small danger" data-act="dmg" data-seq="${esc(b.seq)}">ชำรุด</button>
+                <button class="btn small danger" data-act="cont" data-seq="${esc(b.seq)}">ปนเปื้อน</button>
+              </div>`}</td>` : ''}
+      </tr>`).join('')}
+    </tbody>`;
+  table.querySelectorAll('button[data-act]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const seq = btn.dataset.seq;
+      const b = DB.bottles.find(x=>x.seq===seq);
+      if(!b) return;
+      if(!confirm(`ยืนยันรายงานปัญหาขวด ${seq} เป็น "${btn.dataset.act==='dmg'?'ชำรุด/แตก':'ปนเปื้อน'}"? การนี้จะตัดขวดเป็นสูญเสียทันที`)) return;
+      b.problem = btn.dataset.act==='dmg' ? 'damaged' : 'contaminated';
+      await save('bottles');
+      renderApp();
+    });
+  });
+}
+
+/* ============================ TAB 2: ISSUE (เบิกจ่าย) ============================ */
+function renderIssue(app){
+  const wardOpts = DB.reference.wards.map(w=>`<option value="${esc(w)}">${esc(w)}</option>`).join('');
+  app.innerHTML = `
+    ${canWrite() ? `
+    <div class="card">
+      <h2>บันทึกการเบิกจ่ายขวด</h2>
+      <form id="issueForm">
+        <div class="grid">
+          <div class="field"><label>วันที่เบิก *</label><input type="date" name="date" required value="${new Date().toISOString().slice(0,10)}"></div>
+          <div class="field"><label>เวลา</label><input type="time" name="time" value="${new Date().toTimeString().slice(0,5)}"></div>
+          <div class="field"><label>Ward *</label><select name="ward" required>${wardOpts}</select></div>
+          <div class="field"><label>Sequence No. *</label><input name="seq" required placeholder="สแกน/พิมพ์เลขข้างขวด"></div>
+          <div class="field"><label>ผู้เบิก *</label><input name="by" required></div>
+        </div>
+        <div id="issuePreview"></div>
+        <button class="btn" type="submit">+ บันทึกการเบิก</button>
+      </form>
+    </div>` : ''}
+    <div class="card">
+      <h2>ประวัติการเบิกจ่าย (${DB.issues.length} รายการ)</h2>
+      <div class="twrap"><table id="issueTable"></table></div>
+    </div>
+  `;
+  if(!canWrite()) readonlyNote(app);
+  if(canWrite()){
+    const seqInput = app.querySelector('input[name="seq"]');
+    const preview = document.getElementById('issuePreview');
+    seqInput.addEventListener('input', ()=>{
+      const b = DB.bottles.find(x=>x.seq===seqInput.value.trim());
+      if(!b){ preview.innerHTML = seqInput.value ? `<div class="preview" style="color:#9c352d">ไม่พบขวดนี้ในทะเบียน</div>` : ''; return; }
+      const c = computeBottle(b);
+      if(c.st.state!=='in_stock'){
+        preview.innerHTML = `<div class="preview" style="color:#9c352d">⚠️ ขวดนี้ไม่ได้อยู่ในสถานะ "อยู่ในคลัง" (สถานะปัจจุบัน: ${c.status}) — ตรวจสอบก่อนเบิก</div>`;
+      } else {
+        preview.innerHTML = `<div class="preview">LOT: <b>${esc(b.lot)}</b> · ชนิดขวด: <b>${esc(b.type)}</b> · หมดอายุ: <b>${fmtD(b.expiry)}</b></div>`;
+      }
+    });
+    document.getElementById('issueForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const seq = f.get('seq').trim();
+      const b = DB.bottles.find(x=>x.seq===seq);
+      if(!b){ flash(app, `ไม่พบ Sequence No. "${seq}" ในทะเบียนขวด — กรุณาลงทะเบียนก่อน`, false); return; }
+      const c = computeBottle(b);
+      if(c.st.state!=='in_stock'){ flash(app, `ขวด ${seq} ไม่ได้อยู่ในคลัง (สถานะ: ${c.status}) ไม่สามารถเบิกได้`, false); return; }
+      DB.issues.push({ id:uid(), date:f.get('date'), time:f.get('time')||'00:00', ward:f.get('ward'), seq, by:f.get('by').trim() });
+      await save('issues');
+      e.target.reset();
+      flash(app, `บันทึกการเบิกขวด ${seq} ให้ ${f.get('ward')} เรียบร้อย`);
+      renderApp();
+    });
+  }
+  drawIssueTable();
+}
+function drawIssueTable(){
+  const table = document.getElementById('issueTable');
+  const rows = [...DB.issues].sort((a,b)=> new Date(b.date)-new Date(a.date));
+  if(!rows.length){ table.innerHTML = `<tr><td class="empty">ยังไม่มีรายการเบิก</td></tr>`; return; }
+  table.innerHTML = `<thead><tr><th>วันที่</th><th>เวลา</th><th>Ward</th><th>Seq No.</th><th>LOT</th><th>ชนิดขวด</th><th>ผู้เบิก</th></tr></thead>
+    <tbody>${rows.map(r=>{
+      const b = DB.bottles.find(x=>x.seq===r.seq);
+      return `<tr><td>${fmtD(r.date)}</td><td>${esc(r.time||'')}</td><td>${esc(r.ward)}</td><td>${esc(r.seq)}</td>
+        <td>${esc(b?.lot||'-')}</td><td>${esc(b?.type||'-')}</td><td>${esc(r.by)}</td></tr>`;
+    }).join('')}</tbody>`;
+}
+
+/* ============================ TAB 3: RETURN (รับคืน) ============================ */
+function renderReturn(app){
+  const wardOpts = DB.reference.wards.map(w=>`<option value="${esc(w)}">${esc(w)}</option>`).join('');
+  app.innerHTML = `
+    ${canWrite() ? `
+    <div class="card">
+      <h2>บันทึกการรับคืนขวด</h2>
+      <form id="returnForm">
+        <div class="grid">
+          <div class="field"><label>วันที่รับคืน *</label><input type="date" name="date" required value="${new Date().toISOString().slice(0,10)}"></div>
+          <div class="field"><label>เวลา</label><input type="time" name="time" value="${new Date().toTimeString().slice(0,5)}"></div>
+          <div class="field"><label>Ward *</label><select name="ward" required>${wardOpts}</select></div>
+          <div class="field"><label>Sequence No. (สแกนบาร์โค้ดได้) *</label><input name="seq" required></div>
+          <div class="field"><label>ผู้รับคืน *</label><input name="by" required></div>
+        </div>
+        <div class="field">
+          <label>ประเภทการรับคืน *</label>
+          <select name="returnType" required>
+            <option value="stock">🔄 เข้าคลัง (พร้อมวนจ่ายซ้ำ — นับ Cost Avoidance ถ้าคืนทันเวลา)</option>
+            <option value="culture">🧪 ส่งเพาะเชื้อ (ใช้งานปกติ — ไม่กลับเข้าคลัง)</option>
+            <option value="other">อื่นๆ (ไม่กลับเข้าคลัง — ตัดเป็นขวดใช้งานแล้ว/สูญเสีย)</option>
+          </select>
+        </div>
+        <div id="returnPreview"></div>
+        <button class="btn" type="submit">+ บันทึกการรับคืน</button>
+      </form>
+    </div>` : ''}
+    <div class="card">
+      <h2>ประวัติการรับคืน (${DB.returns.length} รายการ)</h2>
+      <div class="twrap"><table id="returnTable"></table></div>
+    </div>
+  `;
+  if(!canWrite()) readonlyNote(app);
+  if(canWrite()){
+    const seqInput = app.querySelector('input[name="seq"]');
+    const preview = document.getElementById('returnPreview');
+    seqInput.addEventListener('input', ()=>{
+      const b = DB.bottles.find(x=>x.seq===seqInput.value.trim());
+      if(!b){ preview.innerHTML = seqInput.value ? `<div class="preview" style="color:#9c352d">ไม่พบขวดนี้ในทะเบียน</div>` : ''; return; }
+      const c = computeBottle(b);
+      if(c.st.state!=='issued'){
+        preview.innerHTML = `<div class="preview" style="color:#9c352d">⚠️ ขวดนี้ไม่ได้อยู่ในสถานะ "เบิกออกแล้ว" (สถานะปัจจุบัน: ${c.status})</div>`;
+      } else {
+        preview.innerHTML = `<div class="preview">LOT: <b>${esc(b.lot)}</b> · ชนิดขวด: <b>${esc(b.type)}</b> · หมดอายุ: <b>${fmtD(b.expiry)}</b> · เบิกโดย Ward: <b>${esc(c.currentWard)}</b></div>`;
+      }
+    });
+    document.getElementById('returnForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const seq = f.get('seq').trim();
+      const b = DB.bottles.find(x=>x.seq===seq);
+      if(!b){ flash(app, `ไม่พบ Sequence No. "${seq}" ในทะเบียนขวด`, false); return; }
+      const c = computeBottle(b);
+      if(c.st.state!=='issued'){ flash(app, `ขวด ${seq} ไม่ได้อยู่ในสถานะเบิกออก (สถานะ: ${c.status}) ไม่สามารถรับคืนได้`, false); return; }
+      DB.returns.push({ id:uid(), date:f.get('date'), time:f.get('time')||'00:00', ward:f.get('ward'), seq, by:f.get('by').trim(), returnType:f.get('returnType') });
+      await save('returns');
+      e.target.reset();
+      flash(app, `บันทึกการรับคืนขวด ${seq} เรียบร้อย`);
+      renderApp();
+    });
+  }
+  drawReturnTable();
+}
+function drawReturnTable(){
+  const table = document.getElementById('returnTable');
+  const rows = [...DB.returns].sort((a,b)=> new Date(b.date)-new Date(a.date));
+  if(!rows.length){ table.innerHTML = `<tr><td class="empty">ยังไม่มีรายการรับคืน</td></tr>`; return; }
+  const typeLabel = {stock:'🔄 เข้าคลัง', culture:'🧪 ส่งเพาะเชื้อ', other:'อื่นๆ'};
+  table.innerHTML = `<thead><tr><th>วันที่</th><th>เวลา</th><th>Ward</th><th>Seq No.</th><th>ประเภทการรับคืน</th><th>ผู้รับคืน</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td>${fmtD(r.date)}</td><td>${esc(r.time||'')}</td><td>${esc(r.ward)}</td><td>${esc(r.seq)}</td>
+      <td>${typeLabel[r.returnType]||r.returnType}</td><td>${esc(r.by)}</td></tr>`).join('')}</tbody>`;
+}
+
+/* ============================ TAB 4: RECALL TRACKING ============================ */
+function renderRecall(app){
+  app.innerHTML = `
+    ${canWrite() ? `
+    <div class="card">
+      <h2>บันทึกการติดตามเรียกคืน</h2>
+      <form id="recallForm">
+        <div class="grid">
+          <div class="field"><label>วันที่ติดตาม *</label><input type="date" name="date" required value="${new Date().toISOString().slice(0,10)}"></div>
+          <div class="field"><label>Sequence No. *</label><input name="seq" required></div>
+          <div class="field"><label>ผู้ประสานงาน *</label><input name="coordinator" required></div>
+          <div class="field"><label>วิธีติดต่อ</label><select name="method">
+            <option>โทรศัพท์</option><option>ไปรับด้วยตนเอง</option><option>LINE/ข้อความ</option><option>อื่นๆ</option>
+          </select></div>
+          <div class="field"><label>ผลการติดต่อ</label><select name="result">
+            <option>ติดต่อได้ / นัดคืนแล้ว</option><option>ติดต่อได้ / ยังไม่พร้อมคืน</option><option>ติดต่อไม่ได้</option>
+          </select></div>
+          <div class="field"><label>วันที่นัดคืน</label><input type="date" name="appointment"></div>
+        </div>
+        <div class="field"><label>เหตุผลที่ยังไม่คืน</label><input name="reason" placeholder="(ถ้ามี)"></div>
+        <div id="recallPreview"></div>
+        <button class="btn" type="submit">+ บันทึกการติดตาม</button>
+      </form>
+    </div>` : ''}
+    <div class="card">
+      <h2>ขวดที่ต้องเรียกคืนตอนนี้ (⚠️ / ⛔)</h2>
+      <div class="twrap"><table id="urgentTable"></table></div>
+    </div>
+    <div class="card">
+      <h2>ประวัติการติดตามเรียกคืน (${DB.recalls.length} รายการ)</h2>
+      <div class="twrap"><table id="recallTable"></table></div>
+    </div>
+  `;
+  if(!canWrite()) readonlyNote(app);
+  if(canWrite()){
+    const seqInput = app.querySelector('input[name="seq"]');
+    const preview = document.getElementById('recallPreview');
+    seqInput.addEventListener('input', ()=>{
+      const b = DB.bottles.find(x=>x.seq===seqInput.value.trim());
+      if(!b){ preview.innerHTML = seqInput.value ? `<div class="preview" style="color:#9c352d">ไม่พบขวดนี้ในทะเบียน</div>` : ''; return; }
+      const c = computeBottle(b);
+      preview.innerHTML = `<div class="preview">Ward: <b>${esc(c.currentWard||'-')}</b> · หมดอายุ: <b>${fmtD(b.expiry)}</b> · สถานะ: <b>${c.status}</b> · ติดตามมาแล้ว <b>${c.recallCount}</b> ครั้ง</div>`;
+    });
+    document.getElementById('recallForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const seq = f.get('seq').trim();
+      const b = DB.bottles.find(x=>x.seq===seq);
+      if(!b){ flash(app, `ไม่พบ Sequence No. "${seq}" ในทะเบียนขวด`, false); return; }
+      DB.recalls.push({ id:uid(), date:f.get('date'), seq, coordinator:f.get('coordinator').trim(),
+        method:f.get('method'), result:f.get('result'), appointment:f.get('appointment')||'', reason:f.get('reason')||'' });
+      await save('recalls');
+      e.target.reset();
+      flash(app, `บันทึกการติดตามขวด ${seq} เรียบร้อย`);
+      renderApp();
+    });
+  }
+  drawUrgentTable();
+  drawRecallTable();
+}
+function drawUrgentTable(){
+  const table = document.getElementById('urgentTable');
+  const rows = allComputed().filter(b=> b.badge==='orange' || (b.st.state==='issued' && b.badge==='red'))
+    .sort((a,b)=> (parseD(a.expiry)||0) - (parseD(b.expiry)||0));
+  if(!rows.length){ table.innerHTML = `<tr><td class="empty">ไม่มีขวดที่ต้องเรียกคืนด่วนในขณะนี้ 🎉</td></tr>`; return; }
+  table.innerHTML = `<thead><tr><th>Seq No.</th><th>Ward</th><th>ชนิดขวด</th><th>หมดอายุ</th><th>สถานะ</th><th>ติดตามแล้ว</th></tr></thead>
+    <tbody>${rows.map(b=>`<tr><td>${esc(b.seq)}</td><td>${esc(b.currentWard)}</td><td>${esc(b.type)}</td>
+      <td>${fmtD(b.expiry)}</td><td><span class="badge b-${b.badge}">${b.status}</span></td><td>${b.recallCount} ครั้ง</td></tr>`).join('')}</tbody>`;
+}
+function drawRecallTable(){
+  const table = document.getElementById('recallTable');
+  const rows = [...DB.recalls].sort((a,b)=> new Date(b.date)-new Date(a.date));
+  if(!rows.length){ table.innerHTML = `<tr><td class="empty">ยังไม่มีประวัติการติดตาม</td></tr>`; return; }
+  table.innerHTML = `<thead><tr><th>วันที่</th><th>Seq No.</th><th>ผู้ประสานงาน</th><th>วิธีติดต่อ</th><th>ผลการติดต่อ</th><th>นัดคืน</th><th>เหตุผล</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td>${fmtD(r.date)}</td><td>${esc(r.seq)}</td><td>${esc(r.coordinator)}</td>
+      <td>${esc(r.method)}</td><td>${esc(r.result)}</td><td>${r.appointment?fmtD(r.appointment):'-'}</td><td>${esc(r.reason)||'-'}</td></tr>`).join('')}</tbody>`;
+}
+
+/* ============================ TAB 5: DASHBOARD ============================ */
+function renderDashboard(app){
+  const rows = allComputed();
+  const inStock = rows.filter(b=>b.st.state==='in_stock' && !b.problem).length;
+  const issued = rows.filter(b=>b.st.state==='issued' && !b.problem).length;
+  const usedCulture = rows.filter(b=>b.st.state==='used_culture').length;
+  const lossCount = rows.filter(b=>b.financialClass==='loss').length;
+  const costAvoidance = rows.filter(b=>b.financialClass==='save').reduce((s,b)=>s+b.price,0);
+  const lossValue = rows.filter(b=>b.financialClass==='loss').reduce((s,b)=>s+b.price,0);
+  const urgent = rows.filter(b=>b.badge==='orange' || b.badge==='red');
+
+  const wardRisk = {};
+  rows.forEach(b=>{
+    if((b.badge==='orange' || (b.st.state==='issued'&&b.badge==='red')) && b.currentWard){
+      wardRisk[b.currentWard] = (wardRisk[b.currentWard]||0)+1;
+    }
+  });
+  const topWards = Object.entries(wardRisk).sort((a,b)=>b[1]-a[1]).slice(0,10);
+
+  const cutoff = addDays(today(), -90);
+  const usage = {};
+  DB.returns.filter(r=>r.returnType==='culture' && parseD(r.date)>=cutoff).forEach(r=>{
+    usage[r.ward] = (usage[r.ward]||0)+1;
+  });
+  const usageRows = Object.entries(usage).map(([w,c])=>[w,(c/3).toFixed(1)]).sort((a,b)=>b[1]-a[1]);
+
+  app.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${DB.bottles.length}</div><div class="lbl">ขวดทั้งหมด</div></div>
+      <div class="stat"><div class="num">${inStock}</div><div class="lbl">🟢 อยู่ในคลัง</div></div>
+      <div class="stat"><div class="num">${issued}</div><div class="lbl">🔵 เบิกออกแล้ว</div></div>
+      <div class="stat"><div class="num">${usedCulture}</div><div class="lbl">🧪 ส่งเพาะเชื้อแล้ว</div></div>
+      <div class="stat"><div class="num">${urgent.length}</div><div class="lbl">⚠️ ต้องเรียกคืนด่วน</div></div>
+      <div class="stat money"><div class="num">${money(costAvoidance)}฿</div><div class="lbl">Cost Avoidance สะสม</div></div>
+      <div class="stat loss"><div class="num">${money(lossValue)}฿</div><div class="lbl">มูลค่าสูญเสียสะสม (${lossCount} ใบ)</div></div>
+    </div>
+
+    <div class="card">
+      <h2>ขวดที่ต้องเรียกคืนด่วน แยกตาม ward</h2>
+      <div class="twrap"><table>
+        <thead><tr><th>Ward</th><th>จำนวนขวดเสี่ยง</th></tr></thead>
+        <tbody>${topWards.length? topWards.map(([w,c])=>`<tr><td>${esc(w)}</td><td><span class="badge b-orange">${c} ใบ</span></td></tr>`).join('') : '<tr><td class="empty" colspan="2">ไม่มีขวดเสี่ยงในขณะนี้</td></tr>'}</tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <h2>อัตราการใช้ต่อเดือน แยกตาม ward (เฉลี่ย 3 เดือนล่าสุด, จากขวดที่ส่งเพาะเชื้อ)</h2>
+      <div class="twrap"><table>
+        <thead><tr><th>Ward</th><th>ขวด/เดือน (เฉลี่ย)</th></tr></thead>
+        <tbody>${usageRows.length? usageRows.map(([w,c])=>`<tr><td>${esc(w)}</td><td>${c}</td></tr>`).join('') : '<tr><td class="empty" colspan="2">ยังไม่มีข้อมูลการใช้งาน</td></tr>'}</tbody>
+      </table></div>
+    </div>
+  `;
+}
+
+/* ============================ TAB 6: REFERENCE (admin only) ============================ */
+function renderReference(app){
+  app.innerHTML = `
+    <div class="card">
+      <h2>รายชื่อ Ward</h2>
+      <div id="wardList"></div>
+      <form id="wardForm" style="display:flex;gap:8px;margin-top:8px;">
+        <input name="ward" placeholder="ชื่อ ward ใหม่" required style="flex:1;">
+        <button class="btn small" type="submit">+ เพิ่ม</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>ชนิดขวดและราคาต่อขวด</h2>
+      <div id="typeList"></div>
+      <form id="typeForm" style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+        <input name="name" placeholder="ชื่อชนิดขวดใหม่" required style="flex:2;min-width:180px;">
+        <input name="price" type="number" min="0" step="1" placeholder="ราคา (บาท)" required style="flex:1;min-width:100px;">
+        <button class="btn small" type="submit">+ เพิ่ม</button>
+      </form>
+    </div>
+  `;
+  drawWardList(); drawTypeList();
+
+  document.getElementById('wardForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const v = new FormData(e.target).get('ward').trim();
+    if(v && !DB.reference.wards.includes(v)){ DB.reference.wards.push(v); await save('reference'); e.target.reset(); renderApp(); }
+  });
+  document.getElementById('typeForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const name = f.get('name').trim(); const price = Number(f.get('price'));
+    if(name && !DB.reference.types.some(t=>t.name===name)){ DB.reference.types.push({name, price}); await save('reference'); e.target.reset(); renderApp(); }
+  });
+}
+function drawWardList(){
+  const el = document.getElementById('wardList');
+  el.innerHTML = DB.reference.wards.map((w,i)=>`
+    <div class="refline"><span style="flex:1">${esc(w)}</span>
+      <button class="btn small secondary" data-idx="${i}" data-act="delWard">ลบ</button>
+    </div>`).join('') || '<div class="empty">ยังไม่มี ward</div>';
+  el.querySelectorAll('button[data-act="delWard"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      DB.reference.wards.splice(Number(btn.dataset.idx),1); await save('reference'); renderApp();
+    });
+  });
+}
+function drawTypeList(){
+  const el = document.getElementById('typeList');
+  el.innerHTML = DB.reference.types.map((t,i)=>`
+    <div class="refline">
+      <span style="flex:2">${esc(t.name)}</span>
+      <input data-idx="${i}" data-act="price" type="number" style="flex:1;max-width:110px" value="${t.price}">
+      <span>฿</span>
+      <button class="btn small secondary" data-idx="${i}" data-act="delType">ลบ</button>
+    </div>`).join('') || '<div class="empty">ยังไม่มีชนิดขวด</div>';
+  el.querySelectorAll('input[data-act="price"]').forEach(inp=>{
+    inp.addEventListener('change', async ()=>{
+      DB.reference.types[Number(inp.dataset.idx)].price = Number(inp.value);
+      await save('reference');
+    });
+  });
+  el.querySelectorAll('button[data-act="delType"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      DB.reference.types.splice(Number(btn.dataset.idx),1); await save('reference'); renderApp();
+    });
+  });
+}
+
+/* ============================ TAB 7: USER MANAGEMENT (admin only) ============================ */
+async function renderUsers(app){
+  app.innerHTML = `<div class="card"><h2>จัดการสิทธิ์ผู้ใช้</h2><div id="usersList" class="empty">กำลังโหลด…</div></div>`;
+  const { data, error } = await sb.from('profiles').select('id,email,role,created_at').order('created_at', {ascending:true});
+  const el = document.getElementById('usersList');
+  if(error){ el.innerHTML = `<div class="msg err">โหลดรายชื่อผู้ใช้ไม่สำเร็จ: ${esc(error.message)}</div>`; return; }
+  if(!data.length){ el.innerHTML = '<div class="empty">ยังไม่มีผู้ใช้</div>'; return; }
+  el.innerHTML = `<div class="twrap"><table>
+    <thead><tr><th>อีเมล</th><th>สมัครเมื่อ</th><th>สิทธิ์ปัจจุบัน</th><th>เปลี่ยนสิทธิ์</th></tr></thead>
+    <tbody>${data.map(u=>`
+      <tr>
+        <td>${esc(u.email)}${u.id===SESSION.user.id?' <span class="badge b-blue">คุณ</span>':''}</td>
+        <td>${new Date(u.created_at).toLocaleDateString('th-TH')}</td>
+        <td><span class="badge role-${u.role} ${u.role==='admin'?'b-red':u.role==='staff'?'b-yellow':'b-blue'}">${u.role}</span></td>
+        <td>
+          <select data-id="${u.id}" ${u.id===SESSION.user.id?'disabled title="ไม่สามารถเปลี่ยนสิทธิ์ตัวเองได้"':''}>
+            <option value="viewer" ${u.role==='viewer'?'selected':''}>viewer (ดูอย่างเดียว)</option>
+            <option value="staff" ${u.role==='staff'?'selected':''}>staff (งานประจำวัน)</option>
+            <option value="admin" ${u.role==='admin'?'selected':''}>admin (สิทธิ์เต็ม)</option>
+          </select>
+        </td>
+      </tr>`).join('')}</tbody>
+  </table></div>`;
+  el.querySelectorAll('select[data-id]').forEach(sel=>{
+    sel.addEventListener('change', async ()=>{
+      const id = sel.dataset.id; const role = sel.value;
+      const { error } = await sb.from('profiles').update({role}).eq('id', id);
+      if(error){ alert('เปลี่ยนสิทธิ์ไม่สำเร็จ: ' + error.message); renderUsers(app); return; }
+      flash(app, 'เปลี่ยนสิทธิ์เรียบร้อย');
+    });
+  });
+}
+
+/* ============================ AUTH SCREENS ============================ */
+function renderAuthScreen(){
+  document.getElementById('tabbar').style.display = 'none';
+  document.getElementById('userbox').innerHTML = '';
+  document.getElementById('connStatus').innerHTML = 'กรุณาเข้าสู่ระบบเพื่อใช้งาน';
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="authbox">
+      <div class="authtabs">
+        <button id="atSignin" class="active">เข้าสู่ระบบ</button>
+        <button id="atSignup">สมัครสมาชิก</button>
+      </div>
+      <div id="authMsg"></div>
+      <form id="authForm">
+        <div class="field"><label>อีเมล</label><input type="email" name="email" required></div>
+        <div class="field"><label>รหัสผ่าน</label><input type="password" name="password" required minlength="6"></div>
+        <button class="btn" type="submit" style="width:100%" id="authSubmit">เข้าสู่ระบบ</button>
+      </form>
+      <p style="font-size:.75rem;color:var(--gray);margin-top:14px;">สมัครสมาชิกใหม่จะได้สิทธิ์ <b>viewer (ดูอย่างเดียว)</b> เป็นค่าเริ่มต้น — แจ้ง admin ให้เลื่อนสิทธิ์ให้ในเมนู "จัดการผู้ใช้"</p>
+    </div>
+  `;
+  let mode = 'signin';
+  const msg = document.getElementById('authMsg');
+  function setMode(m){
+    mode = m;
+    document.getElementById('atSignin').classList.toggle('active', m==='signin');
+    document.getElementById('atSignup').classList.toggle('active', m==='signup');
+    document.getElementById('authSubmit').textContent = m==='signin' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก';
+    msg.innerHTML='';
+  }
+  document.getElementById('atSignin').addEventListener('click', ()=>setMode('signin'));
+  document.getElementById('atSignup').addEventListener('click', ()=>setMode('signup'));
+  document.getElementById('authForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const email = f.get('email').trim(), password = f.get('password');
+    msg.innerHTML = '';
+    if(mode==='signin'){
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if(error){ msg.innerHTML = `<div class="msg err">เข้าสู่ระบบไม่สำเร็จ: ${esc(error.message)}</div>`; return; }
+    } else {
+      const { error } = await sb.auth.signUp({ email, password });
+      if(error){ msg.innerHTML = `<div class="msg err">สมัครสมาชิกไม่สำเร็จ: ${esc(error.message)}</div>`; return; }
+      msg.innerHTML = `<div class="msg ok">สมัครสำเร็จ! หากโปรเจกต์เปิดการยืนยันอีเมล กรุณาตรวจสอบอีเมลก่อนเข้าสู่ระบบ</div>`;
+    }
+  });
+}
+
+async function renderUserbox(){
+  const box = document.getElementById('userbox');
+  box.innerHTML = `
+    <span class="rolebadge role-${MY_ROLE}">${MY_ROLE}</span>
+    <span>${esc(MY_EMAIL)}</span>
+    <button class="btn-out" id="signOutBtn">ออกจากระบบ</button>
+  `;
+  document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+    await sb.auth.signOut();
+  });
+}
+
+/* ============================ SETUP SCREEN (ถ้ายังไม่ตั้งค่า Supabase) ============================ */
+function renderSetupScreen(){
+  document.getElementById('tabbar').style.display = 'none';
+  document.getElementById('connStatus').innerHTML = '<span class="conn-dot conn-bad"></span>ยังไม่ได้เชื่อมต่อฐานข้อมูล';
+  document.getElementById('app').innerHTML = `
+    <div class="setup">
+      <h2>⚙️ ตั้งค่าฐานข้อมูลและระบบ Login ก่อนใช้งาน</h2>
+      <p>อ่านขั้นตอนละเอียดในไฟล์ <code>README.md</code> ที่แนบมาด้วย (มี SQL ให้ copy-paste ครบ)
+      แล้วแก้ค่า <code>SUPABASE_URL</code> และ <code>SUPABASE_ANON_KEY</code> ที่ต้นไฟล์นี้</p>
+    </div>
+  `;
+}
+
+/* ============================ MAIN AUTH FLOW ============================ */
+async function loadMyProfile(){
+  const { data, error } = await sb.from('profiles').select('role,email').eq('id', SESSION.user.id).maybeSingle();
+  if(error || !data){ MY_ROLE='viewer'; MY_EMAIL = SESSION.user.email; return; }
+  MY_ROLE = data.role; MY_EMAIL = data.email || SESSION.user.email;
+}
+
+async function boot(){
+  document.getElementById('tabbar').style.display = '';
+  document.getElementById('app').innerHTML = '<div class="empty">กำลังโหลดข้อมูล…</div>';
+  await loadMyProfile();
+  await renderUserbox();
+  document.getElementById('connStatus').innerHTML = '<span class="conn-dot conn-ok"></span>เชื่อมต่อฐานข้อมูลแล้ว';
+  await loadAll();
+  renderTabbar();
+  renderApp();
+}
+
+(function init(){
+  if(!CONFIGURED){ renderSetupScreen(); return; }
+  sb.auth.onAuthStateChange((event, session)=>{
+    SESSION = session;
+    LOADED = false;
+    if(session){ boot().catch(e=>{ console.error(e); document.getElementById('app').innerHTML = `<div class="msg err">เกิดข้อผิดพลาด: ${esc(e.message)}</div>`; }); }
+    else { renderAuthScreen(); }
+  });
+})();
+</script>
+</body>
+</html>
