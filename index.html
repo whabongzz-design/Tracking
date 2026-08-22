@@ -314,6 +314,7 @@ function fefoRank(){
 
 /* ============================ APP STATE / ROUTER ============================ */
 let TAB = 'registry';
+let editingSeq = null; // seq ของขวดที่กำลังแก้ไขในหน้าทะเบียนขวด (null = โหมดลงทะเบียนใหม่)
 function tabs(){
   const t = [
     {id:'registry', label:'1) ทะเบียนขวด'},
@@ -367,20 +368,25 @@ function readonlyNote(app){
 /* ============================ TAB 1: REGISTRY ============================ */
 function renderRegistry(app){
   const typeOpts = DB.reference.types.map(t=>`<option value="${esc(t.name)}">${esc(t.name)} (${money(t.price)}฿)</option>`).join('');
+  const editing = editingSeq ? DB.bottles.find(b=>b.seq===editingSeq) : null;
+  if(editingSeq && !editing) editingSeq = null; // ขวดที่กำลังแก้ถูกลบไปแล้ว เช่นจากอีกหน้าต่าง
   app.innerHTML = `
     ${canWrite() ? `
     <div class="card">
-      <h2>ลงทะเบียนขวดใหม่ (ทำครั้งเดียวต่อขวด)</h2>
+      <h2>${editing ? `✏️ แก้ไขขวด ${esc(editing.seq)}` : 'ลงทะเบียนขวดใหม่ (ทำครั้งเดียวต่อขวด)'}</h2>
       <form id="regForm">
         <div class="grid">
-          <div class="field"><label>Sequence No. (เลขข้างขวด) *</label><input name="seq" required placeholder="สแกน/พิมพ์เลขข้างขวด"></div>
-          <div class="field"><label>LOT No. *</label><input name="lot" required></div>
-          <div class="field"><label>ชนิดขวด *</label><select name="type" required>${typeOpts}</select></div>
-          <div class="field"><label>วันที่รับเข้าคลัง * (dd/mm/yyyy)</label><input type="text" name="received" class="date-input" placeholder="dd/mm/yyyy" maxlength="10" required></div>
-          <div class="field"><label>วันหมดอายุ * (dd/mm/yyyy)</label><input type="text" name="expiry" class="date-input" placeholder="dd/mm/yyyy" maxlength="10" required></div>
-          <div class="field"><label>หมายเหตุ</label><input name="notes" placeholder="(ถ้ามี)"></div>
+          <div class="field"><label>Sequence No. (เลขข้างขวด) *</label><input name="seq" required placeholder="สแกน/พิมพ์เลขข้างขวด" value="${editing?esc(editing.seq):''}" ${editing?'readonly title="เปลี่ยน Sequence No. ไม่ได้ ให้ลบแล้วลงทะเบียนใหม่แทน"':''}></div>
+          <div class="field"><label>LOT No. *</label><input name="lot" required value="${editing?esc(editing.lot):''}"></div>
+          <div class="field"><label>ชนิดขวด *</label><select name="type" required>${DB.reference.types.map(t=>`<option value="${esc(t.name)}" ${editing&&editing.type===t.name?'selected':''}>${esc(t.name)} (${money(t.price)}฿)</option>`).join('')}</select></div>
+          <div class="field"><label>วันที่รับเข้าคลัง * (dd/mm/yyyy)</label><input type="text" name="received" class="date-input" placeholder="dd/mm/yyyy" maxlength="10" required value="${editing?isoToDDMMYYYY(editing.received):''}"></div>
+          <div class="field"><label>วันหมดอายุ * (dd/mm/yyyy)</label><input type="text" name="expiry" class="date-input" placeholder="dd/mm/yyyy" maxlength="10" required value="${editing?isoToDDMMYYYY(editing.expiry):''}"></div>
+          <div class="field"><label>หมายเหตุ</label><input name="notes" placeholder="(ถ้ามี)" value="${editing?esc(editing.notes||''):''}"></div>
         </div>
-        <button class="btn" type="submit">+ ลงทะเบียนขวด</button>
+        <div class="row-actions">
+          <button class="btn" type="submit">${editing ? '💾 บันทึกการแก้ไข' : '+ ลงทะเบียนขวด'}</button>
+          ${editing ? `<button class="btn secondary" type="button" id="cancelEditBtn">ยกเลิกการแก้ไข</button>` : ''}
+        </div>
       </form>
     </div>` : ''}
 
@@ -392,15 +398,30 @@ function renderRegistry(app){
   `;
   if(!canWrite()) readonlyNote(app);
   if(canWrite()){
+    if(editing){
+      document.getElementById('cancelEditBtn').addEventListener('click', ()=>{ editingSeq=null; renderApp(); });
+    }
     document.getElementById('regForm').addEventListener('submit', async e=>{
       e.preventDefault();
       const f = new FormData(e.target);
       const seq = f.get('seq').trim();
-      if(DB.bottles.some(b=>b.seq===seq)){ flash(app, `Sequence No. "${seq}" มีอยู่แล้วในระบบ`, false); return; }
       const received = ddmmyyyyToISO(f.get('received'));
       const expiry = ddmmyyyyToISO(f.get('expiry'));
       if(!received){ flash(app, `วันที่รับเข้าคลังไม่ถูกต้อง กรุณากรอกรูปแบบ dd/mm/yyyy`, false); return; }
       if(!expiry){ flash(app, `วันหมดอายุไม่ถูกต้อง กรุณากรอกรูปแบบ dd/mm/yyyy`, false); return; }
+      if(editing){
+        editing.lot = f.get('lot').trim();
+        editing.type = f.get('type');
+        editing.received = received;
+        editing.expiry = expiry;
+        editing.notes = f.get('notes')||'';
+        await save('bottles');
+        editingSeq = null;
+        flash(app, `แก้ไขขวด ${seq} เรียบร้อย`);
+        renderApp();
+        return;
+      }
+      if(DB.bottles.some(b=>b.seq===seq)){ flash(app, `Sequence No. "${seq}" มีอยู่แล้วในระบบ`, false); return; }
       DB.bottles.push({
         seq, lot:f.get('lot').trim(), type:f.get('type'),
         received, expiry,
@@ -429,7 +450,7 @@ function drawRegTable(filter){
   table.innerHTML = `
     <thead><tr>
       <th>Seq No.</th><th>LOT</th><th>ชนิดขวด</th><th>รับเข้า</th><th>หมดอายุ</th><th>เหลือ(วัน)</th>
-      <th>สถานะ</th><th>Ward ปัจจุบัน</th><th>FEFO</th><th>ผลลัพธ์ทางการเงิน</th>${canWrite()?'<th>รายงานปัญหา</th>':''}${canManageReference()?'<th>ลบ</th>':''}
+      <th>สถานะ</th><th>Ward ปัจจุบัน</th><th>FEFO</th><th>ผลลัพธ์ทางการเงิน</th>${canWrite()?'<th>รายงานปัญหา</th>':''}${canManageReference()?'<th>แก้ไข/ลบ</th>':''}
     </tr></thead>
     <tbody>${rows.map(b=>`
       <tr class="${fefo[b.seq]&&fefo[b.seq]<=3?'hi-fefo':''}">
@@ -444,12 +465,21 @@ function drawRegTable(filter){
                 <button class="btn small danger" data-act="dmg" data-seq="${esc(b.seq)}">ชำรุด</button>
                 <button class="btn small danger" data-act="cont" data-seq="${esc(b.seq)}">ปนเปื้อน</button>
               </div>`}</td>` : ''}
-        ${canManageReference() ? `<td><button class="btn small secondary" data-act="del" data-seq="${esc(b.seq)}">🗑️ ลบ</button></td>` : ''}
+        ${canManageReference() ? `<td><div class="row-actions">
+                <button class="btn small secondary" data-act="edit" data-seq="${esc(b.seq)}">✏️ แก้ไข</button>
+                <button class="btn small secondary" data-act="del" data-seq="${esc(b.seq)}">🗑️ ลบ</button>
+              </div></td>` : ''}
       </tr>`).join('')}
     </tbody>`;
   table.querySelectorAll('button[data-act]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const seq = btn.dataset.seq;
+      if(btn.dataset.act==='edit'){
+        editingSeq = seq;
+        renderApp();
+        document.getElementById('regForm')?.scrollIntoView({behavior:'smooth', block:'start'});
+        return;
+      }
       if(btn.dataset.act==='del'){
         if(!confirm(`ยืนยันลบขวด ${seq} ออกจากทะเบียนถาวร? รวมถึงประวัติเบิก/คืน/ติดตามของขวดนี้ทั้งหมด — ย้อนกลับไม่ได้`)) return;
         DB.bottles = DB.bottles.filter(x=>x.seq!==seq);
